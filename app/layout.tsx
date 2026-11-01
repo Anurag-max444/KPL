@@ -1,7 +1,9 @@
 import './globals.css';
+import { Hind } from 'next/font/google';
+const font = Hind({ subsets: ['devanagari', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap' });
 import { AppProvider } from '../lib/ctx';
 export const metadata = { title: 'KPL Puja Hisaab', manifest: '/manifest.json', appleWebApp: { capable: true, title: 'KPL' } };
 export const viewport = { themeColor: '#8e1b14', width: 'device-width', initialScale: 1 };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="hi"><body><AppProvider>{children}</AppProvider></body></html>;
+  return <html lang="hi"><body className={font.className}><AppProvider>{children}</AppProvider></body></html>;
 }

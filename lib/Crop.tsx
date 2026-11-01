@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useApp } from './ctx';
 
 export default function Crop({ file, aspect, outW, circle, type, onDone, onCancel }: any) {
+  const { t } = useApp();
   const W = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 400) - 64);
   const H = W / aspect;
   const [url] = useState(() => URL.createObjectURL(file));
@@ -25,16 +27,16 @@ export default function Crop({ file, aspect, outW, circle, type, onDone, onCance
   };
   return (
     <div className="modal"><div className="mbox">
-      <b>फ़ोटो सेट करें</b>
-      <small>फ़ोटो को उँगली से खिसकाएँ और नीचे स्लाइडर से बड़ा-छोटा करें। फ्रेम में जितना दिख रहा है, उतना ही सेव होगा।</small>
+      <b>{t('फ़ोटो सेट करें')}</b>
+      <small>{t('फ़ोटो को उँगली से खिसकाएँ और नीचे स्लाइडर से बड़ा-छोटा करें। फ्रेम में जितना दिख रहा है, उतना ही सेव होगा।')}</small>
       <div className="frame" style={{ width: W, height: H, borderRadius: circle ? '50%' : 12 }}
         onPointerDown={e => { (e.currentTarget as any).setPointerCapture(e.pointerId); drag.current = { px: e.clientX, py: e.clientY, ox: o.x, oy: o.y }; }}
         onPointerMove={e => { const d = drag.current; if (d) setO(clamp(d.ox + e.clientX - d.px, d.oy + e.clientY - d.py)); }}
         onPointerUp={() => (drag.current = null)}>
         <img src={url} alt="" draggable={false} style={{ position: 'absolute', left: o.x, top: o.y, width: im.width * s, height: im.height * s, maxWidth: 'none', pointerEvents: 'none' }} />
       </div>
-      <input type="range" min="1" max="3" step="0.02" value={z} onChange={e => zoom(+e.target.value)} aria-label="ज़ूम" />
-      <div className="acts"><button className="b" onClick={save}>सेव करें</button><button className="g" onClick={onCancel}>रद्द करें</button></div>
+      <input type="range" min="1" max="3" step="0.02" value={z} onChange={e => zoom(+e.target.value)} aria-label={t('ज़ूम')} />
+      <div className="acts"><button className="b" onClick={save}>{t('सेव करें')}</button><button className="g" onClick={onCancel}>{t('रद्द करें')}</button></div>
     </div></div>
   );
 }

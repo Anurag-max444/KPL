@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { sb } from './supabase';
+import { L } from './lang';
 
 export const PERMS: [string, string][] = [
   ['view_chanda', 'चंदा देखना'], ['add_chanda', 'चंदा जोड़ना'],
@@ -17,8 +18,8 @@ const group = (a: any[], k: string) => {
   const m: any = {}; a.forEach(x => (m[x[k] || 'नहीं लिखा'] = (m[x[k] || 'नहीं लिखा'] || 0) + Number(x.amount)));
   return Object.entries(m).sort((p: any, q: any) => q[1] - p[1]) as [string, number][];
 };
-export function csv(rows: any[], name: string) {
-  if (!rows.length) return alert('एक्सपोर्ट करने के लिए कोई एंट्री नहीं है');
+export function csv(rows: any[], name: string, tr: (k: string) => string) {
+  if (!rows.length) return alert(tr('एक्सपोर्ट करने के लिए कोई एंट्री नहीं है'));
   const h = Object.keys(rows[0]);
   const c = (v: any) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const t = '\ufeff' + [h.join(',')].concat(rows.map(r => h.map(k => c(r[k])).join(','))).join('\n');
@@ -40,6 +41,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [us, setUs] = useState<any[]>([]);
   const [err, setErr] = useState('');
   const [cfg, setCfg] = useState<any>({});
+  const [lang, setLangS] = useState('hi');
+  useEffect(() => { try { const l = localStorage.getItem('kpl_lang'); if (l) setLangS(l); } catch (e) {} }, []);
+  const setLang = (l: string) => { setLangS(l); try { localStorage.setItem('kpl_lang', l); } catch (e) {} document.documentElement.lang = l === 'en' ? 'en' : 'hi'; };
+  const t = (k: string): string => (lang === 'hi' ? k : L[k]?.[lang === 'en' ? 0 : 1]) || k;
   const can = (p: string) => me?.role === 'superadmin' || me?.perms?.includes(p);
 
   const loadMe = useCallback(async () => {
@@ -71,7 +76,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     e.preventDefault(); setErr('');
     const f = new FormData(e.target);
     const { error } = await sb.auth.signInWithPassword({ email: `${String(f.get('u')).trim().toLowerCase()}@kpl.local`, password: String(f.get('p')) });
-    if (error) return setErr('यूज़रनेम या पासवर्ड गलत है');
+    if (error) return setErr(t('यूज़रनेम या पासवर्ड गलत है'));
     loadMe();
   }
   const logout = async () => { await sb.auth.signOut(); setMe(null); setCh([]); setKh([]); setAu([]); setUs([]); };
@@ -91,7 +96,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (file && file.size) {
       path = `${Date.now()}-${file.name.replace(/[^\w.]/g, '_')}`;
       const u = await sb.storage.from('kpl-bills').upload(path, file);
-      if (u.error) return alert('बिल अपलोड नहीं हुआ: ' + u.error.message);
+      if (u.error) return alert(t('बिल अपलोड नहीं हुआ') + ': ' + u.error.message);
     }
     const { error } = await sb.from('kpl_kharch').insert({
       year, category: f.get('category'), item: String(f.get('item')).trim(), amount: Number(f.get('amount')), paid_on: f.get('paid_on'),
@@ -100,9 +105,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (error) return alert(error.message);
     form.reset(); load();
   }
-  async function cancel(t: 'chanda' | 'kharch', id: number) {
-    const r = prompt('रद्द करने का कारण लिखें (कम से कम 5 अक्षर):'); if (!r) return;
-    const { error } = await sb.rpc('kpl_cancel', { t, rid: id, reason: r });
+  async function cancel(tb: 'chanda' | 'kharch', id: number) {
+    const r = prompt(t('रद्द करने का कारण लिखें (कम से कम 5 अक्षर):')); if (!r) return;
+    const { error } = await sb.rpc('kpl_cancel', { t: tb, rid: id, reason: r });
     if (error) alert(error.message); load();
   }
   async function openBill(p: string) {
@@ -127,7 +132,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     e.preventDefault(); const f = new FormData(e.target);
     const rows = ['name', 'tagline', 'dates', 'address'].map(k => ({ key: k, value: String(f.get(k) || '').trim() }));
     const { error } = await sb.from('kpl_settings').upsert(rows);
-    if (error) return alert(error.message); alert('सेव हो गया'); loadCfg();
+    if (error) return alert(error.message); alert(t('सेव हो गया')); loadCfg();
   }
   async function upPhoto(blob: Blob, prefix: string) {
     const path = `${prefix}-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
@@ -141,16 +146,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (error) return alert(error.message); loadCfg();
   }
 
-  if (!ready) return <div className="empty">खुल रहा है…</div>;
+  if (!ready) return <div className="empty">{t('खुल रहा है…')}</div>;
   if (!me) return (
     <form className="login" style={{ display: 'block' }} onSubmit={login}>
+      <LangPick lang={lang} set={setLang} />
       {cfg.logo && <img src={cfg.logo} alt="" className="logo" />}
       <h1>{cfg.name || 'KPL'}</h1>
-      <p style={{ color: 'var(--mut)', marginTop: 0 }}>{cfg.tagline || 'दुर्गा पूजा का पूरा हिसाब'}</p>
-      <label className="f">यूज़रनेम</label><input name="u" required autoCapitalize="none" autoComplete="username" />
-      <label className="f" style={{ marginTop: 10 }}>पासवर्ड</label><input name="p" type="password" required autoComplete="current-password" />
+      <p style={{ color: 'var(--mut)', marginTop: 0 }}>{cfg.tagline || t('दुर्गा पूजा का पूरा हिसाब')}</p>
+      <label className="f">{t('यूज़रनेम')}</label><input name="u" required autoCapitalize="none" autoComplete="username" />
+      <label className="f" style={{ marginTop: 10 }}>{t('पासवर्ड')}</label><input name="p" type="password" required autoComplete="current-password" />
       {err && <div className="err">{err}</div>}
-      <button className="b" style={{ width: '100%', marginTop: 14 }}>लॉगिन करें</button>
+      <button className="b" style={{ width: '100%', marginTop: 14 }}>{t('लॉगिन करें')}</button>
     </form>
   );
 
@@ -158,26 +164,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const tin = sum(ach), tout = sum(akh), bal = tin - tout;
   const todayIn = sum(ach.filter(x => x.paid_on === today()));
   const catRows = group(akh, 'category'), colRows = group(ach, 'collector'), vilRows = group(ach, 'village');
-  const menu = ([['/hisaab', '📊', 'हिसाब', can('view_chanda') || can('view_kharch')], ['/chanda', '💰', 'चंदा', can('view_chanda')],
-    ['/kharch', '🧾', 'खर्च', can('view_kharch')], ['/record', '📜', 'रिकॉर्ड', can('view_audit')],
-    ['/members', '🧑‍🤝‍🧑', 'समिति के सदस्य', me.role === 'superadmin'], ['/users', '👥', 'यूज़र', me.role === 'superadmin'],
-    ['/settings', '⚙️', 'सेटिंग', me.role === 'superadmin']] as [string, string, string, boolean][]).filter(x => x[3]);
+  const menu = ([['/hisaab', '📊', t('हिसाब'), can('view_chanda') || can('view_kharch')], ['/chanda', '💰', t('चंदा'), can('view_chanda')],
+    ['/kharch', '🧾', t('खर्च'), can('view_kharch')], ['/record', '📜', t('रिकॉर्ड'), can('view_audit')],
+    ['/members', '🧑‍🤝‍🧑', t('समिति के सदस्य'), me.role === 'superadmin'], ['/users', '👥', t('यूज़र'), me.role === 'superadmin'],
+    ['/settings', '⚙️', t('सेटिंग'), me.role === 'superadmin']] as [string, string, string, boolean][]).filter(x => x[3]);
   const wa = (x: any) => {
     const d = String(x.paid_on).split('-').reverse().join('/');
-    const msg = ['🙏 जय माँ दुर्गा 🙏', '', `आदरणीय ${x.donor} जी${x.village ? ' (' + x.village + ')' : ''},`, '',
-      `${cfg.name || 'दुर्गा पूजा समिति'} के लिए आपका ${rs(x.amount)} का चंदा हमें प्राप्त हुआ।`, '',
-      `📄 रसीद नंबर: ${x.id}`, `📅 तारीख: ${d}`, `💳 भुगतान: ${x.mode}`, `✍️ प्राप्तकर्ता: ${x.collector}`, '',
-      'माँ दुर्गा आपके और आपके परिवार पर अपनी कृपा बनाए रखें।', 'आपके सहयोग के लिए हृदय से धन्यवाद। 🙏', '',
-      `— ${cfg.name || 'दुर्गा पूजा समिति'}`].concat(cfg.tagline ? [cfg.tagline] : []).join('\n');
-    return `https://wa.me/91${String(x.phone).replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(msg)}`;
+    const nm = cfg.name || 'दुर्गा पूजा समिति';
+    const msg = ['*जय माँ दुर्गा*', '', `आदरणीय ${x.donor} जी${x.village ? ' (' + x.village + ')' : ''},`, '',
+      `${nm} के लिए आपका ${rs(x.amount)} का चंदा हमें प्राप्त हुआ।`, '',
+      `रसीद नंबर: ${x.id}`, `तारीख: ${d}`, `भुगतान: ${x.mode}`, `प्राप्तकर्ता: ${x.collector}`, '',
+      'माँ दुर्गा आपके और आपके परिवार पर अपनी कृपा बनाए रखें।', 'आपके सहयोग के लिए हृदय से धन्यवाद।', '',
+      `*${nm}*`].concat(cfg.tagline ? [cfg.tagline] : []).join('\n');
+    return `https://api.whatsapp.com/send?phone=91${String(x.phone).replace(/\D/g, '').slice(-10)}&text=${encodeURIComponent(msg)}`;
   };
 
-  const value = { bal, me, cfg, year, setYear, ch, kh, au, us, can, ach, akh, tin, tout, todayIn, catRows, colRows, vilRows, wa, menu, logout, addCh, addKh, cancel, openBill, addUser, upd, saveCfg, upImg, upPhoto, load, loadCfg };
+  const value = { t, lang, setLang, bal, me, cfg, year, setYear, ch, kh, au, us, can, ach, akh, tin, tout, todayIn, catRows, colRows, vilRows, wa, menu, logout, addCh, addKh, cancel, openBill, addUser, upd, saveCfg, upImg, upPhoto, load, loadCfg };
   return <Ctx.Provider value={value}><Shell>{children}</Shell></Ctx.Provider>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { cfg, year, setYear, menu, me, logout } = useApp();
+  const { t, lang, setLang, cfg, year, setYear, menu, me, logout } = useApp();
   const path = usePathname() || '';
   const [open, setOpen] = useState(false);
   useEffect(() => { setOpen(false); }, [path]);
@@ -186,16 +193,25 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="band"><div className="row">
       <Link href="/" className="brand">{cfg.logo && <img src={cfg.logo} alt="" className="logo sm" />}<b>{cfg.name || 'KPL'}</b></Link>
       <span className="rt">
-        {['/hisaab', '/chanda', '/kharch'].includes(path) && <select value={year} onChange={e => setYear(+e.target.value)} aria-label="साल">{[0, 1, 2, 3, 4].map(i => <option key={i}>{new Date().getFullYear() + 1 - i}</option>)}</select>}
-        <button className="mg" onClick={() => setOpen(true)} aria-label="मैनेज"><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="2" width="7" height="7" rx="1.5" /><rect x="11" y="2" width="7" height="7" rx="1.5" /><rect x="2" y="11" width="7" height="7" rx="1.5" /><rect x="11" y="11" width="7" height="7" rx="1.5" /></svg>मैनेज</button>
+        {['/hisaab', '/chanda', '/kharch'].includes(path) && <select value={year} onChange={e => setYear(+e.target.value)} aria-label={t('साल')}>{[0, 1, 2, 3, 4].map(i => <option key={i}>{new Date().getFullYear() + 1 - i}</option>)}</select>}
+        <button className="mg" onClick={() => setOpen(true)} aria-label={t('मैनेज')}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="2" width="7" height="7" rx="1.5" /><rect x="11" y="2" width="7" height="7" rx="1.5" /><rect x="2" y="11" width="7" height="7" rx="1.5" /><rect x="11" y="11" width="7" height="7" rx="1.5" /></svg>{t('मैनेज')}</button>
       </span>
     </div></div>
     <div className={'ov' + (open ? ' on' : '')} onClick={() => setOpen(false)} />
     <aside className={'drawer' + (open ? ' on' : '')} aria-hidden={!open}>
-      <div className="dh"><b>मैनेज</b><button className="g" onClick={() => setOpen(false)} aria-label="बंद करें">✕</button></div>
-      <nav>{([['/', '🏠', 'होम']] as any[]).concat(menu).map(([h, i, l]: any) => <Link key={h} href={h} className={'dl' + (path === h ? ' cur' : '')}><span>{i}</span>{l}</Link>)}</nav>
-      <div className="df"><div><b>{me.full_name}</b><small style={{ display: 'block', color: 'var(--mut)' }}>@{me.username}</small></div><button className="g" onClick={logout}>लॉगआउट</button></div>
+      <div className="dh"><b>{t('मैनेज')}</b><button className="g" onClick={() => setOpen(false)} aria-label={t('बंद करें')}>✕</button></div>
+      <nav>{([['/', '🏠', t('होम')]] as any[]).concat(menu).map(([h, i, l]: any) => <Link key={h} href={h} className={'dl' + (path === h ? ' cur' : '')}><span>{i}</span>{l}</Link>)}</nav>
+      <div style={{ padding: '0 16px 12px' }}><LangPick lang={lang} set={setLang} /></div>
+      <div className="df"><div><b>{me.full_name}</b><small style={{ display: 'block', color: 'var(--mut)' }}>@{me.username}</small></div><button className="g" onClick={logout}>{t('लॉगआउट')}</button></div>
     </aside>
     <div className="wrap">{children}</div>
   </>);
+}
+
+export function Head({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
+  return <div className="pgh"><div className="ic">{icon}</div><div><h1>{title}</h1>{sub && <p>{sub}</p>}</div></div>;
+}
+
+function LangPick({ lang, set }: any) {
+  return <div className="lang">{[['hi', 'हिंदी'], ['en', 'English'], ['hl', 'Hinglish']].map(([k, l]) => <button key={k} type="button" className={lang === k ? 'on' : ''} onClick={() => set(k)}>{l}</button>)}</div>;
 }
